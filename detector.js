@@ -24,7 +24,7 @@ export class Detector {
 
     const res = await fetch(url);
     if (!res.ok) {
-      throw new Error(`モデルが見つかりません（${url}）。README の手順で yolov8n.onnx を index.html と同じ場所に置いてください。`);
+      throw new Error(`モデルが見つかりません（${url}）。yolov8n.onnx を index.html と同じ場所にアップロードしてください。`);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
 

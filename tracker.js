@@ -1,5 +1,6 @@
 // ByteTrack の考え方（高スコア→低スコアの2段階対応付け）を軽量に実装した追跡器。
 // 動き予測は等速モデル、対応付けは IoU と中心距離を組み合わせた類似度の貪欲法。
+// カメラのパン・ズーム（cam）を先に打ち消してから対応付ける（BoT-SORT の考え方）。
 
 class Track {
   constructor(id, box, score, frame) {
@@ -10,6 +11,13 @@ class Track {
     this.hits = 1;
     this.lastFrame = frame;
     this.confirmed = false;
+  }
+  applyCamera(cam) {
+    this.box = [
+      cam.s * this.box[0] + cam.tx, cam.s * this.box[1] + cam.ty,
+      cam.s * this.box[2] + cam.tx, cam.s * this.box[3] + cam.ty,
+    ];
+    this.vel = this.vel.map((v) => v * cam.s);
   }
   predicted(frame) {
     const dt = Math.min(10, frame - this.lastFrame);
@@ -76,8 +84,10 @@ export class ByteTracker {
     this.nextId = 1;
   }
 
-  // dets: [{box, score}] / frame: 通し番号。今コマで確認できた確定トラックを返す。
-  update(dets, frame) {
+  // dets: [{box, score}] / frame: 通し番号 / cam: 前コマ→今コマのカメラの動き
+  // 今コマで確認できた確定トラックを返す。
+  update(dets, frame, cam = null) {
+    if (cam && cam.ok) for (const t of this.tracks) t.applyCamera(cam);
     const { highThresh, matchThresh, lowMatchThresh, maxMissed, minHits } = this.opt;
     const high = dets.filter((d) => d.score >= highThresh);
     const low = dets.filter((d) => d.score < highThresh);

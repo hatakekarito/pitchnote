@@ -1,50 +1,74 @@
-// 調整用の設定値。ここを書き換えれば挙動を変えられます。
+// 調整用の設定値。GitHub 上で鉛筆マークから編集できます。
 export const CONFIG = {
-  // YOLO モデル（ONNX形式）。README の手順でこのフォルダに置いてください。
+  // AIモデル（index.html と同じ場所に置く）
   modelUrl: './yolov8n.onnx',
   ortWasmPath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/',
-  inputSize: 640, // モデルを書き出したときの imgsz と合わせる（640 or 1280）
+  inputSize: 640,
 
-  // クラス番号。COCO学習済みなら person=0 / sports ball=32。
-  // 自作のサッカー用モデルを使う場合はその番号に変更。
+  // クラス番号（COCO学習済みモデル：person=0 / sports ball=32）
   classes: { person: 0, ball: 32 },
   personConf: 0.2,
   ballConf: 0.12,
   nmsIou: 0.5,
 
-  // 横長の映像を左右に分割して推論（小さいボール・選手の検出精度が上がる。処理時間は増える）
+  // 横長の映像を分割して推論（小さいボールが見つけやすくなる。処理は遅くなる）
   tilesX: 2,
   tileOverlap: 0.15,
 
-  // 1秒あたりの解析コマ数。上げると精度↑・速度↓
-  sampleFps: 10,
+  // 1秒あたりの解析コマ数（下げると速く、上げると正確）
+  sampleFps: 8,
 
-  // 少年サッカー（8人制）の標準的なピッチ寸法（m）
-  pitch: { length: 68, width: 50, goalWidth: 5 },
+  // ユニフォームの色の判定
+  color: {
+    maxDist: 42,   // 登録した色からこれ以上離れている人は「どれでもない」として除外
+    ratio: 0.8,    // 1番近い色が2番目よりはっきり近いときだけ判定
+    minVotes: 3,   // チームを決めるのに必要な判定回数
+  },
+
+  // カメラの動きの推定
+  motion: {
+    width: 320,    // 推定に使う縮小画像の幅
+    maxScale: 0.15,// 1コマで許すズーム変化の割合
+  },
 
   tracker: {
-    highThresh: 0.45,   // これ以上の検出で新しい選手を登録
-    matchThresh: 0.3,   // 1段目の対応付けのしきい値
-    lowMatchThresh: 0.4,// 低スコア検出での2段目の対応付け
-    maxMissed: 30,      // 見失ってから保持するコマ数（10fpsで3秒）
-    minHits: 3,         // 何コマ連続で見えたら選手として確定するか
+    highThresh: 0.45,
+    matchThresh: 0.3,
+    lowMatchThresh: 0.4,
+    maxMissed: 24,
+    minHits: 3,
   },
 
   analysis: {
-    possessionRadius: 1.8, // ボール保持とみなす距離（m）
-    controlSpeed: 6,       // これより速いボールは保持とみなさない（m/s）
+    playerHeight: 1.4,     // 選手の平均身長(m)。画面上の距離をおおよそのメートルに換算するのに使う
+    possessionRadius: 1.5, // ボール保持とみなす距離（m・目安）
+    controlSpeed: 7,       // これより速いボールは保持とみなさない（m/s・目安）
     minPossessionFrames: 2,
-    minPassLength: 3,      // これより短い移動はパスに数えない（m）
+    minPassLength: 4,      // これより短い移動はパスに数えない（m・目安）
     maxPassTime: 4,        // 秒
-    shotSpeed: 8,          // シュートとみなすボール速度（m/s）
-    shotAngleDeg: 35,      // ゴール方向とのずれの許容角
-    shotMaxDist: 25,       // ゴールからこの距離以内で蹴った場合のみ（m）
-    dribbleMin: 8,         // ドリブルとして実況する運んだ距離（m）
-    sprintSpeed: 4.2,      // スプリント判定（m/s ≒ 15km/h、小学生向け）
-    maxPlayerSpeed: 9,     // これを超える移動は追跡ミスとして除外（m/s）
-    maxBallSpeed: 35,      // これを超えるボール移動は誤検出として除外（m/s）
+    shotSpeed: 9,          // シュートとみなすボール速度（m/s・目安）
+    attackZone: 0.62,      // 攻撃側この割合より奥でのキックだけシュート候補に
+    dribbleMin: 7,         // ドリブルとして実況する距離（m・目安）
+    maxBallSpeed: 40,      // これを超えるボール移動は誤検出として除外（m/s）
     ballMaxGap: 1.0,       // ボールを見失った区間を補間する最大秒数
   },
 
-  minPlayerTime: 5, // 記録表に載せる最低出場秒数
+  // 番号付け
+  labeling: {
+    minTime: 3,        // これより短くしか映っていない追跡は一覧に出さない（秒）
+    maxGap: 8,         // 見失ってから何秒以内に現れた選手を「同じ子かも」の候補にするか
+    maxSpeed: 6.5,     // 候補にする移動の速さの上限（m/s）
+    thumbsPerTrack: 3, // 追跡1件あたりに残す写真の数
+    thumbHeight: 150,  // 写真の高さ（px）
+    thumbMinPx: 40,    // これより小さく映っているときは写真を残さない（px）
+    thumbInterval: 1,  // 同じ人の写真を撮り直す最短の間隔（秒）
+    thumbSpacing: 3,   // 残す写真どうしの時間の間隔（秒）
+  },
+
+  // レポート
+  report: {
+    joinGap: 4,         // 同じチームの保持がこの秒数以内に続けば1つの攻撃とみなす
+    minPhaseTouches: 2, // これ未満のタッチの攻撃は「試合の流れ」から省く（シュート・ドリブル・長い保持は残す）
+    minPhaseSec: 6,
+  },
 };
