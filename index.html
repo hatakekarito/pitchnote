@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ピッチノート｜少年サッカーの試合映像を解析</title>
+  <meta name="description" content="試合動画から選手の動き・パス・シュートを解析して実況します。動画はブラウザの中だけで処理されます。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.webgpu.min.js"></script>
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <h1>ピッチノート</h1>
+    <p class="lede">少年サッカーの試合動画から、選手の動き・パス・シュートを読み取って実況します。動画はこの端末のブラウザの中だけで処理され、どこにも送信されません。</p>
+  </header>
+
+  <main class="layout">
+    <section class="stage" aria-label="映像">
+      <div id="screen" class="screen">
+        <video id="video" playsinline controls preload="metadata"></video>
+        <canvas id="overlay"></canvas>
+        <label for="file" class="drop">
+          <strong>試合の動画をここにドロップ</strong>
+          <span>またはタップしてファイルを選ぶ（MP4 など）</span>
+        </label>
+      </div>
+      <p class="screen-opts">
+        <label class="check"><input type="checkbox" id="showBoxes" checked> 映像に選手の枠を表示</label>
+      </p>
+    </section>
+
+    <ol class="steps">
+      <li class="step" data-step="1">
+        <h2>動画を選ぶ</h2>
+        <label class="btn ghost file-btn">ファイルを選ぶ<input type="file" id="file" accept="video/*"></label>
+        <p id="fileName" class="muted small"></p>
+        <div class="range">
+          <label>開始 <input id="rangeStart" type="text" inputmode="numeric" value="0:00" aria-label="解析の開始時刻"></label>
+          <label>終了 <input id="rangeEnd" type="text" inputmode="numeric" value="0:00" aria-label="解析の終了時刻"></label>
+        </div>
+        <p class="muted small">最初は1〜2分の範囲で試すのがおすすめです。</p>
+      </li>
+
+      <li class="step" data-step="2">
+        <h2>ピッチの四隅を指定</h2>
+        <p id="pickHint" class="small"></p>
+        <div class="row">
+          <button type="button" id="pickBtn" class="btn ghost">四隅を指定する</button>
+        </div>
+        <div class="range">
+          <label>縦 <input id="pitchL" type="number" min="20" max="120" value="68"> m</label>
+          <label>横 <input id="pitchW" type="number" min="15" max="90" value="50"> m</label>
+        </div>
+        <p class="muted small">8人制の標準は68m×50mです。実際のピッチに合わせて変更してください。</p>
+      </li>
+
+      <li class="step" data-step="3">
+        <h2>解析する</h2>
+        <button type="button" id="runBtn" class="btn">解析を開始</button>
+        <progress id="progress" max="1" value="0"></progress>
+        <p id="status" class="small" role="status" aria-live="polite"></p>
+      </li>
+
+      <li class="step" data-step="4">
+        <h2>再生して実況を聞く</h2>
+        <label class="check"><input type="checkbox" id="voice" checked> 実況を音声で読み上げる</label>
+        <p id="voiceNote" class="muted small"></p>
+        <button type="button" id="playBtn" class="btn">最初から再生</button>
+      </li>
+    </ol>
+  </main>
+
+  <section id="results" class="results" hidden>
+    <div class="board">
+      <div class="radar-block">
+        <div class="radar-head">
+          <h2>ピッチ</h2>
+          <div class="seg" role="group" aria-label="表示の切り替え">
+            <button type="button" data-radar="live" aria-pressed="true">ライブ</button>
+            <button type="button" data-radar="0" id="heatA" aria-pressed="false">チームAの位置</button>
+            <button type="button" data-radar="1" id="heatB" aria-pressed="false">チームBの位置</button>
+          </div>
+        </div>
+        <canvas id="radar"></canvas>
+        <p class="muted small">ライブは動画の再生位置に合わせて動きます。「位置」は解析範囲でよくいた場所の濃さです。</p>
+      </div>
+      <div id="teams" class="teams"></div>
+    </div>
+
+    <div class="detail">
+      <section>
+        <h2>実況ログ</h2>
+        <ol id="events" class="events"></ol>
+      </section>
+      <section>
+        <h2>選手ごとの記録</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>チーム</th><th>出場</th><th>走行距離(m)</th><th>最高速度(km/h)</th>
+                <th>スプリント</th><th>タッチ</th><th>パス</th><th>シュート</th><th>奪取</th>
+              </tr>
+            </thead>
+            <tbody id="playersBody"></tbody>
+          </table>
+        </div>
+        <p class="muted small">IDは追跡の番号で、背番号ではありません。選手が重なると同じ子が別のIDに分かれることがあります。</p>
+      </section>
+    </div>
+
+    <div class="exports">
+      <button type="button" id="exportCsv" class="btn ghost">記録をCSVで保存</button>
+      <button type="button" id="exportJson" class="btn ghost">解析結果をJSONで保存</button>
+      <button type="button" id="exportText" class="btn ghost">実況テキストを保存</button>
+    </div>
+  </section>
+
+  <footer class="foot muted small">
+    検出：YOLO（ONNX Runtime Web）／追跡：ByteTrack方式／読み上げ：Web Speech API。数値は映像からの推定値です。
+  </footer>
+</body>
+</html>
